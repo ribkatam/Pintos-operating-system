@@ -28,6 +28,9 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* ribka edited */
+static struct list sleep_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -108,6 +111,10 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+
+	/* Ribka edited */
+	list_init( &sleep_list);
+
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -203,6 +210,10 @@ thread_create (const char *name, int priority,
 	t->tf.ss = SEL_KDSEG;
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
+	
+
+	/* Ribka edited from  here */
+	t->wakeup_tick=0;	
 
 	/* Add to run queue. */
 	thread_unblock (t);
@@ -587,4 +598,47 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+void
+thread_sleep(int64_t ticks){
+	struct thread *curr =thread_current();
+	enum intr_level old_level;
+	
+	old_level = intr_disable();
+
+	if(curr != idle_thread){
+		curr->status = THREAD_BLOCKED;
+		curr->wakeup_tick = ticks;
+		struct thread *to_remove = list_entry (list_pop_front (&ready_list), struct thread, elem);
+		list_push_back (&sleep_list, &to_remove->elem);
+		
+/** TODO update the global tick if necessary */
+	schedule();
+
+	}
+
+	intr_set_level(old_level);
+
+}
+
+void
+thread_foreach(void){
+struct list_elem *e;
+ ASSERT (intr_get_level () == INTR_OFF);
+for (e=list_begin(&sleep_list); e!= list_end (&sleep_list);)
+{
+  
+        int64_t now = timer_ticks();
+	struct thread *c = list_entry (e, struct thread, elem);
+        if ( c->wakeup_tick >= now){
+		
+                thread_unblock(c);
+		e = list_remove(e);
+        }else{
+		e = list_next(e);
+	}
+
+
+}
+
 }
